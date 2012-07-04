@@ -1,0 +1,507 @@
+SAMPLE : 
+
+PostgreSQL HA 环境 : 
+服务器 : DELL R610 8G MEM
+CentOS 5.x 64bit
+PostgreSQL : 9.2beta2
+node1 : 192.168.169.110
+node2 : 192.168.169.111
+VIP : 192.168.169.116
+FENCE DEVICE : DELL IDRAC
+VOTE_HOST : 192.168.101.35
+
+FENCE DEVICE配置(node1, node2) : 
+IP : 192.168.169.110    IDRAC : 192.168.179.213    USER : test    PWD : FEFETESTf12345112
+IP : 192.168.169.111    IDRAC : 192.168.179.212    USER : test    PWD : FEFETESTe12345112
+idrac开启ipmi功能, 用户赋予ipmi可开关机的角色(OPERATOR 或 ADMINISTRATOR, 本例使用的是OPERATOR).
+
+OS配置(node1, node2) : 
+关闭acpi服务, 避免fence慢或者fence不成功的可能.
+chkconfig acpid off
+
+增加yum源, 安装需要的包. (node1, node2)
+/etc/yum.repos.d/rhel-sky.repo
+[Cluster]
+name=Cluster Directory
+baseurl=http://192.168.164.38/rhel-server-5.4-i386/Cluster
+enabled=1
+gpgcheck=0
+ 
+[ClusterStorage]
+name=ClusterStorage Directory
+baseurl=http://192.168.164.38/rhel-server-5.4-i386/ClusterStorage
+enabled=1
+gpgcheck=0
+ 
+[Server]
+name=Server Directory
+baseurl=http://192.168.164.38/rhel-server-5.4-i386/Server
+enabled=1
+gpgcheck=0
+ 
+[VT]
+name=VT Directory
+baseurl=http://192.168.164.38/rhel-server-5.4-i386/VT
+enabled=1
+gpgcheck=0
+
+安装需要的包.(node1, node2)
+yum -y install python-devel tcl-devel perl-devel OpenIPMI-tools .....
+
+vi /etc/sysctl.conf (node1, node2)
+# add by digoal.zhou
+kernel.shmmni = 4096
+kernel.sem = 50100 64128000 50100 1280
+fs.file-max = 7672460
+net.ipv4.ip_local_port_range = 9000 65000
+net.core.rmem_default = 1048576
+net.core.rmem_max = 4194304
+net.core.wmem_default = 262144
+net.core.wmem_max = 1048576
+net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_max_syn_backlog = 4096
+net.core.netdev_max_backlog = 10000
+net.ipv4.netfilter.ip_conntrack_max = 655360
+fs.aio-max-nr = 1048576
+net.ipv4.tcp_timestamps = 0
+vm.overcommit_memory = 0
+
+vi /etc/security/limits.conf (node1, node2)
+# add by digoal.zhou
+* soft    nofile  131072
+* hard    nofile  131072
+* soft    nproc   131072
+* hard    nproc   131072
+* soft    core    unlimited
+* hard    core    unlimited
+* soft    memlock 50000000
+* hard    memlock 50000000
+
+同步时钟 (node1, node2)
+crontab -e
+8 * * * * /usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
+
+配置DNS : (node1, node2)
+vi /etc/resolv.conf
+nameserver xxx.xxx.xxx.xxx
+
+配置网络, 新增一个vip的配置 : (node1, node2)
+cd /etc/sysconfig/network-scripts/
+cp ifcfg-eth0 ifcfg-eth0:1
+vi ifcfg-eth0:1
+node1 : 
+[root@db-192-168-169-110 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
+DEVICE=eth0
+ONBOOT=yes
+BOOTPROTO=static
+HWADDR=D4:BE:D9:AD:9A:B6
+IPADDR=192.168.169.110
+NETMASK=255.255.255.0
+[root@db-192-168-169-110 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0:1
+DEVICE=eth0:1
+ONBOOT=no
+BOOTPROTO=static
+HWADDR=D4:BE:D9:AD:9A:B6
+IPADDR=192.168.169.116
+NETMASK=255.255.255.0
+
+node2 : 
+[root@db-192-168-169-111 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
+DEVICE=eth0
+ONBOOT=yes
+BOOTPROTO=static
+HWADDR=D4:BE:D9:AD:97:7A
+IPADDR=192.168.169.111
+NETMASK=255.255.255.0
+[root@db-192-168-169-111 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0:1
+DEVICE=eth0:1
+ONBOOT=no
+BOOTPROTO=static
+HWADDR=D4:BE:D9:AD:97:7A
+IPADDR=192.168.169.116
+NETMASK=255.255.255.0
+
+关闭network服务自动启动 (node1, node2)
+chkconfig network off
+
+增加network服务启动项到rc.local (node1, node2)
+vi /etc/rc.local
+# add by pg_clusterd
+/sbin/service network start
+/sbin/ifup eth0
+/sbin/ifdown eth0:1
+
+按需配置iptables (node1, node2, vote_host)
+允许node1,node2 相互访问PostgreSQL监听端口, 
+允许vote_host访问node1,node2的PostgreSQL监听端口, 
+允许node1,node2访问vote_host的代理端口.
+vi /etc/sysconfig/iptables
+# 私有网段
+-A RH-Firewall-1-INPUT -s 192.168.0.0/16 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 10.0.0.0/8 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 172.16.0.0/16 -j ACCEPT
+
+新增postgres用户
+useradd postgres
+
+/*  ------------------------------------ 本例用sudo替代这个过程
+配置postgres用户 ssk-key : (node1, node2)
+su - root
+vi /etc/ssh/sshd_config
+PubkeyAuthentication yes
+service sshd restart
+
+su - postgres
+ssh-keygen -t dsa
+ssh-keygen -t rsa
+cd ~/.ssh
+cat id_dsa.pub >>./authorized_keys
+cat id_rsa.pub >>./authorized_keys
+chmod 700 ~
+chmod -R 700 ~/.ssh
+合并两台机器的authorized_keys
+
+把postgres用户的authorized_keys内容合并到root用户下, 用于ifup eth0:1
+su - root
+mkdir .ssh
+chmod 700 ~
+chmod 700 .ssh
+cd .ssh
+cat /home/postgres/authorized_keys >>./authorized_keys
+chmod 400 authorized_keys
+--------------------------------------- 本例用sudo替代这个过程 */
+
+
+配置sudo命令 : (node1, node2)
+让postgres用户可以调用/sbin/ifup命令, failover时使用. (sudo /sbin/ifup eth0:1)
+visudo -f /etc/sudoers
+# 末尾添加
+# add by digoal
+postgres ALL=(ALL) NOPASSWD: /sbin/ifup
+
+
+PostgreSQL 安装 : (node1, node2)
+vi /home/postgres/.bash_profile
+# add by digoal
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=1921
+export PGDATA=/data/pgdata/pg_root
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$ORACLE_HOME/bin:$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+export PGUSER=digoal
+export PGHOST=$PGDATA
+export PGDATABASE=postgres
+alias rm='rm -i'
+alias ll='ls -lh'
+
+wget http://ftp.postgresql.org/pub/source/v9.2.0beta2/postgresql-9.2beta2.tar.bz2
+
+tar -jxvf postgresql-9.2beta2.tar.bz2
+. /home/postgres/.bash_profile
+cd postgresql-9.2beta2
+./configure --prefix=/opt/pgsql --with-pgport=1921 --with-perl --with-python --with-tcl --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=16
+gmake world
+sudo gmake install-world
+
+初始化数据库 : (node1)
+mkdir /data/pgdata
+chown postgres:postgres /data/pgdata
+mkdir -p /var/applog/pg_log/digoal/1921
+chown -R postgres:postgres /var/applog/pg_log
+su - postgres
+initdb -D $PGDATA -E UTF8 --locale=C -U postgres -W
+
+配置流复制 : (node1)
+cd $PGDATA
+vi pg_hba.conf
+host    replication     replica        192.168.169.110/32                md5 
+host    replication     replica        192.168.169.111/32                md5 
+host    replication     replica        192.168.169.116/32                md5 
+host all all 0.0.0.0/0 md5
+
+cd $PGDATA
+vi postgresql.conf
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1921                             # (change requires restart)
+max_connections = 1000                  # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directory = '.'             # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+shared_preload_libraries = 'pg_stat_statements'         # (change requires restart)
+vacuum_cost_delay = 10ms                # 0-100 milliseconds
+vacuum_cost_limit = 5000                # 1-10000 credits
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 128               # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32    # max number of walsender processes
+wal_keep_segments = 1024                # in logfile segments, 16MB each; 0 disables
+hot_standby = on                # "on" allows queries during recovery
+max_standby_archive_delay = 300s        # max delay before canceling queries
+max_standby_streaming_delay = 300s      # max delay before canceling queries
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 2.0                  # same scale as above
+effective_cache_size = 8192MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = '/var/applog/pg_log/digoal/1921'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_statement = 'ddl'                   # none, ddl, mod, all
+log_timezone = 'PRC'
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+autovacuum_max_workers = 3              # max number of autovacuum subprocesses
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+pg_stat_statements.max = 1000
+pg_stat_statements.track = all
+
+cp /opt/pgsql/share/recovery.conf.sample ./recovery.done
+vi recovery.done
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=192.168.169.116 port=1921 user=replica keepalives_idle=60'             # e.g. 'host=localhost port=1921'
+trigger_file = '/data/pgdata/pg_root/.1921.trigger'
+
+配置密码文件 : (node1, node2)
+vi /home/postgres/.pgpass
+192.168.169.110:1921:replication:replica:REPLICA321
+192.168.169.111:1921:replication:replica:REPLICA321
+192.168.169.116:1921:replication:replica:REPLICA321
+chmod 400 .pgpass
+
+启动数据库, 添加replication数据库角色 : (node1)
+pg_ctl start
+psql postgres postgres
+create extension pg_stat_statements;
+create role replica nosuperuser nocreatedb nocreaterole noinherit replication connection limit 32 login encrypted password 'REPLICA321';
+
+启动VIP : (node1)
+sudo /sbin/ifup eth0:1
+
+复制主库, 创建standby : (node2)
+su - postgres
+pg_basebackup -D $PGDATA -F p -x stream -c fast -l base -P -v -s 1 -h 192.168.169.116 -p 1921 -U replica
+cd $PGDATA
+mv recovery.done recovery.conf
+
+启动standby : (node2)
+su - postgres
+pg_ctl start
+正常的话, node1上面会多一个sender进程, node2上面会多一个receiver进程 : 
+postgres: wal sender process replica 192.168.169.111(45020) streaming 0/4047700
+postgres: wal receiver process   streaming 0/4047700
+
+配置HA : 
+新增HA user, db, 状态表(node1) : 
+create role sky_pg_cluster nosuperuser nocreatedb nocreaterole noinherit login encrypted password 'SKY_PG_cluster_321';
+create database sky_pg_cluster with template template0 encoding 'UTF8' owner sky_pg_cluster;
+\c sky_pg_cluster sky_pg_cluster
+create schema sky_pg_cluster authorization sky_pg_cluster;
+create table cluster_status (id int unique default 1, last_alive timestamp(0) without time zone);
+-- 限制cluster_status表有且只有一行 : 
+CREATE FUNCTION cannt_delete ()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+   RAISE EXCEPTION 'You can not delete!';
+END; $$;
+
+CREATE TRIGGER cannt_delete
+BEFORE DELETE ON cluster_status
+FOR EACH ROW EXECUTE PROCEDURE cannt_delete();
+
+CREATE TRIGGER cannt_truncate
+BEFORE TRUNCATE ON cluster_status
+FOR STATEMENT EXECUTE PROCEDURE cannt_delete();
+
+-- 插入初始数据
+insert into cluster_status values (1, now());
+
+配置仲裁机, 前提(仲裁机, node1, node2 网络互通)
+仲裁机上起一个监听端口, 用于跳转到vip的PostgreSQL主库监听端口. 如(仲裁机:11921 <-> master:1921)
+仲裁机部署要诀, 即使vip不通, 仲裁机的映射端口应该可以被standby主机正常访问, 用来判断仲裁机是否正常.
+wget http://www.inlab.de/balance-3.54.tar.gz
+tar -zxvf balance-3.54.tar.gz
+make
+make install
+balance 11921 192.168.169.116:1921
+vi /etc/rc.local
+/usr/sbin/balance -t 5 -T 5 11921 192.168.169.116:1921
+测试node1和node2, 通过仲裁机连接数据库正常.
+psql -h 仲裁机 -p 11921 -U postgres postgres 正常.
+
+配置.pgpass :  (node1, node2): 
+集群failover程序sky_pg_clusterd.sh将用到这个密码文件, 分别用于访问vip上的PostgreSQL监听端口, 本机standby的PostgreSQL监听端口, vote_host上的跳转端口.
+原有基础上增加以下几行 : 
+vi /home/postgres/.pgpass
+192.168.169.116:1921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
+127.0.0.1:1921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
+192.168.101.35:11921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
+
+
+配置failover, log_filter, nagios脚本 : 
+1. /usr/local/bin/sky_pg_clusterd.sh
+2. /usr/local/bin/log_filter.sh
+3. /usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh
+4. /usr/local/nagios/libexec/check_standby_lag.sh
+chmod 555 /usr/local/bin/sky_pg_clusterd.sh
+chmod 555 /usr/local/bin/log_filter.sh
+chmod 555 /usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh
+chmod 555 /usr/local/nagios/libexec/check_standby_lag.sh
+
+配置日志清理crontab (node1, node2)
+# /tmp/sky_pg_clusterd.log 需要log_filter.sh来清理.
+# 定期执行/usr/local/bin/log_filter.sh
+sudo crontab -e
+8 1 * * * /usr/local/bin/log_filter.sh
+
+
+启动HA(按步骤) : 
+1. 主节点 : 
+启动主库, su - postgres -c "pg_ctl start"
+启动VIP, sudo ifup eth0:1
+启动sky_pg_clusterd.sh, su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
+
+2. standby节点 : 
+启动standby库, su - postgres -c "pg_ctl start"
+启动sky_pg_clusterd.sh, su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
+
+
+配置nagios : (node1, node2)
+监控如下项 : 
+1. 端口的监控在nagios服务端配置
+pirmary_ip+port
+virtual_ip+port
+standby_ip+port
+vote_host_ip+port
+2. 以下脚本的调用配置在 /usr/local/nagios/etc/nrpe.cfg
+sky_pg_clusterd是否存活  (/usr/local/nagios/libexec/check_sky_pg_clusterd.sh)
+standby同步延时监控  (/usr/local/nagios/libexec/check_standby_lag.sh)
+vi /usr/local/nagios/etc/nrpe.cfg
+command[check_sky_pg_clusterd]=/usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh
+command[check_standby_lag]=/usr/local/nagios/libexec/check_standby_lag.sh
+
+service xinetd restart
+
+注意, 这些脚本是哪个用户去调用的(如root或nagios或postgres用户等, 因为需要用到psql, 建议改成postgres用户.).
+使用其他用户执行nagios命令, 修改user和group : 
+cat /etc/xinetd.d/nrpe
+# default: on
+# description: NRPE (Nagios Remote Plugin Executor)
+service nrpe
+{
+        flags           = REUSE
+        socket_type     = stream    
+        port            = 5666    
+        wait            = no
+        user            = postgres
+        group           = postgres
+        server          = /usr/local/nagios/bin/nrpe
+        server_args     = -c /usr/local/nagios/etc/nrpe.cfg --inetd
+        log_on_failure  += USERID
+        disable         = no
+        only_from       = 127.0.0.1 192.168.1.111 其他略
+        log_type        = FILE /dev/null
+}
+
+
+测试failover : 
+1. 关闭vip, 发生failover
+2. 关闭vip和vote_host上的转发端口, 不发生failover
+3. 关闭主库, 发生failover
+4. 关闭standby网卡, 不发生failover
+
+
+failover发生后 : 
+1. 重构standby (原来的primary变成standby) , 使用rsync或pg_basebackup (本例使用pg_basebackup, 如果使用rsync可以配置node1和node2的ssh无密码互访, ssh-keygen) : 
+2. 在新的standby上启动sky_pg_clusterd.sh
+su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
+
+
+
+
+
+
+
+附录 : 
+一、
+注意事项 : 
+主库的变更和备库的变更需要协调的地方.
+1. pg_hba.conf, postgresql.conf的更新. 无法通过流复制传递, 所以需要手工同步.
+2. 表空间新增, 目录需要先在备份和主节点建好. 
+3. 新增模块, 模块如果是新编译的, 那么主备都需要编译. 如果是已经编译好的只是在数据库里面执行CREATE extension或执行SQL的则会自动通过流复制同步.
+
+二、
+ipmitool 用到的 fence部分 : 
+fence : 
+              power
+
+                     Performs a chassis control  command  to  view  and change the power state.
+
+                      status
+
+                             Show current chassis power status.
+
+                      on
+
+                             Power up chassis.
+
+                      off
+
+                             Power  down chassis into soft off (S4/S5 state).  WARNING: This command does not initiate
+                             a clean shutdown of the operating system prior to powering down the system.
+
+                      cycle
+
+                             Provides a power off interval of at least 1 second.  No action should  occur  if  chassis
+                             power  is in S4/S5 state, but it is recommended to check power state first and only issue
+                             a power cycle command if the  system  power is on or in lower sleep state than S4/S5.
+
+                      reset
+
+                             This command will perform a hard reset.
+
+                      diag
+
+                             Pulse a diagnostic interrupt (NMI) directly to the processor(s).
+
+                      soft
+
+                             Initiate a soft-shutdown of OS via ACPI.  This can be done in a number of ways,  commonly
+                             by  simulating  an overtemperture or by simulating a power button press.  It is necessary
+                             for there to be Operating System support for ACPI and some sort of  daemon  watching  for
+                             events for this soft power to work.
+
+-L <privlvl>
+              Force session privilege level.  Can be CALLBACK, USER, OPERATOR, ADMINISTRATOR. Default  is  ADMINISTRA-
+              TOR.
+
+fence 命令 : 
+ipmitool -L OPERATOR -H 192.168.179.213 -U skyuser -P csuN1crxg4As power reset
+
