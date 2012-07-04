@@ -1,0 +1,73 @@
+3台主机组建的PostgreSQL HA集群(2台数据库节点, 1台仲裁节点) : 
+
+启动集群的步骤,
+1. 启动master, VIP
+2. 启动standby
+3. 判断standby与master的连通性, 正常恢复等
+4. 启动standby上的sky_pg_clusterd进程
+
+HA程序, sky_pg_clusterd.sh, 进程逻辑 : 
+1. 启动前判断master vip的状态正常(update表)
+2. 启动前判断standby的状态正常(in recovery, lag(更新时间=update retuning time))
+   (当standby 在启动时如果和master有较大延时, sky_pg_clusterd将无法启动, 输出告警)
+3. sky_pg_clusterd failover逻辑
+
+HA程序, sky_pg_clusterd.sh, failover条件 : 
+1. master 数据库不正常 (通过update来判断)
+2. standby 正常 (is in recovery)
+3. standby lag 在接受范围内 (update的时间和当前时间的比较)
+4. 如何 避免因 standby 自身问题导致的failover (例如standby与主库网络的故障), 
+   (加入第三者, 1. 确保standby到第三者(如网关或其他仲裁主机)的连通性, 2. standby通过第三者去判断master的状态是否正常)
+   只有当standby和第三者都认为master不正常时可以发生failover .
+
+HA程序, sky_pg_clusterd.sh, 激活步骤 : 
+1. fence主服务器
+2. 激活standby数据库
+3. 起VIP
+4. 结束sky_pg_clusterd进程, 通知 nagios 发生 failover(持续warning).
+
+集群维护注意事项 : 
+任何可能触发failover的维护都必须先关闭运行在standby节点上面的sky_pg_clusterd进程.
+kill -9 `pidof "sky_pg_clusterd"`
+
+
+nagios 监控 : 
+pirmary_ip+port
+virtual_ip+port
+standby_ip+port
+vote_host_ip+port
+sky_pg_clusterd是否存活(check_sky_pg_clusterd.sh)
+standby-lag(check_standby_lag.sh)
+注意, 这些脚本是哪个用户去调用的(如root或nagios或postgres用户等, 建议改成postgres用户.).
+cat /etc/xinetd.d/nrpe 
+# default: on
+# description: NRPE (Nagios Remote Plugin Executor)
+service nrpe
+{
+        flags           = REUSE
+        socket_type     = stream    
+        port            = 5666    
+        wait            = no
+        user            = postgres
+        group           = postgres
+        server          = /usr/local/nagios/bin/nrpe
+        server_args     = -c /usr/local/nagios/etc/nrpe.cfg --inetd
+        log_on_failure  += USERID
+        disable         = no
+        only_from       = 127.0.0.1 192.168.1.111 其他略
+        log_type        = FILE /dev/null
+}
+
+仲裁机 : 
+1. balance 跳转至 master_vip+port
+
+
+集中存储集群信息 : 
+ip, port, lag
+
+
+
+
+
+
+
