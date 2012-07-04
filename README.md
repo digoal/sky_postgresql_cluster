@@ -2,7 +2,7 @@ sky_postgresql_cluster
 ======================
 
 sky_postgresql_cluster is a PostgreSQL HA module write in shell, HA via three host, include two postgresql 
-(primary and stream replication standby) and one vote host. Applicatoin connect to sky_postgresql_cluster via a virtual
+(primary and stream replication standby) and one vote host. Applicatoin connect to sky_postgresql_cluster via a virtual 
 ip address.
 
 Requirement : 
