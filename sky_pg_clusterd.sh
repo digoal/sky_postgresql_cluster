@@ -135,10 +135,7 @@ do
 done
 
 
-# thanks http://www.inlab.de/
 
-# author : Digoal.zhou
-# readme
 
 # 判断是否要进入failover过程
 # 1. master 数据库不正常 (通过update来判断)
@@ -156,4 +153,10 @@ done
 
 # nagios 根据/tmp/nagios_sky_pg_clusterd_alivetime 修改时间和内容(grep $PRIMARY_CONTEXT | $STANDBY_CONTEXT )监控 sky_pg_clusterd 进程存活.
 
+
+# Thanks http://www.inlab.de/
+
+# Author : Digoal zhou
+# Email : digoal@126.com
+# Blog : http://blog.163.com/digoal@126/
 

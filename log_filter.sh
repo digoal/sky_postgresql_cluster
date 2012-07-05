@@ -14,3 +14,7 @@ SKY_PG_CLUSTERD_LOGFILE1=/tmp/sky_pg_clusterd.log.1
 
 cat $SKY_PG_CLUSTERD_LOGFILE | grep -v "UPDATE 1"|grep -v "SET" >>$SKY_PG_CLUSTERD_LOGFILE1
 echo "" >$SKY_PG_CLUSTERD_LOGFILE
+
+# Author : Digoal zhou
+# Email : digoal@126.com
+# Blog : http://blog.163.com/digoal@126/

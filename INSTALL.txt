@@ -505,3 +505,7 @@ fence :
 fence 命令 : 
 ipmitool -L OPERATOR -H 192.168.179.213 -U skyuser -P csuN1crxg4As power reset
 
+# Author : Digoal zhou
+# Email : digoal@126.com
+# Blog : http://blog.163.com/digoal@126/
+
