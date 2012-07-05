@@ -18,4 +18,6 @@ Requirement :
 4. sky_postgresql_cluster's status monitor use nagios.
 
 
-# Author Digoal.zhou
+# Author : Digoal.zhou
+# Email : digoal@126.com
+# Blog : http://blog.163.com/digoal@126/
