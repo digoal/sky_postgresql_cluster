@@ -1,4 +1,4 @@
-SAMPLE : 
+sky PostgreSQL Cluster Implement Example : 
 
 PostgreSQL HA 环境 : 
 服务器 : DELL R610 8G MEM
