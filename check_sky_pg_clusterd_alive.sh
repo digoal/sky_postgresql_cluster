@@ -16,34 +16,35 @@ EXIST=1
 ALIVE_CNT=0
 
 
-find $FILE -mmin -2 -print
-EXIST=$?
-if [ $EXIST -ne 0 ]; then
+if [ -f $FILE ]; then
+  P_CNT=`grep -c $PRIMARY_CONTEXT $FILE`
+  S_CNT=`grep -c $STANDBY_CONTEXT $FILE`
+
+  if [ $P_CNT -eq 1 ]; then
+    cat $FILE
+    exit 0
+  fi
+
+  if [ $S_CNT -eq 1 ]; then
+    ALIVE_CNT=`find $FILE -mmin -$ALIVE_MINUTES -print|wc -l`
+    if [ $ALIVE_CNT -eq 1 ]; then
+      exit 0
+    else
+      echo -e "keepalive timeout $ALIVE_MINUTES mintues."
+      cat $FILE
+      exit 2
+    fi
+  else
+    echo -e "$FILE content is not standard, please check. must contain $PRIMARY_CONTEXT or $STANDBY_CONTEXT ."
+    exit 2
+  fi
+
+else
   echo -e "`date +%F%T` file $FILE not exists. "
   exit 2
 fi
 
-P_CNT=`grep -c $PRIMARY_CONTEXT $FILE`
-S_CNT=`grep -c $STANDBY_CONTEXT $FILE`
 
-if [ $P_CNT -eq 1 ]; then
-  cat $FILE
-  exit 0
-fi
-
-if [ $S_CNT -eq 1 ]; then
-  ALIVE_CNT=`find $FILE -mmin -$ALIVE_MINUTES -print|wc -l`
-  if [ $ALIVE_CNT -eq 1 ]; then
-    exit 0
-  else
-    echo -e "keepalive timeout $ALIVE_MINUTES mintues."
-    cat $FILE
-    exit 2
-  fi
-else
-  echo -e "$FILE content is not standard, please check. must contain $PRIMARY_CONTEXT or $STANDBY_CONTEXT ."
-  exit 2
-fi
 
 exit 1
 
