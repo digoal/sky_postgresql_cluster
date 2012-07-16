@@ -35,15 +35,17 @@ FENCE_PWD=FEFETESTf12345112
 # pg_failover函数, 用于异常时fence主库, 将standby激活, 启动VIP.
 pg_failover() {
 FENCE_STATUS=1
-IFUP_STATUS=1
 PROMOTE_STATUS=1
+IFUP_STATUS=1
 echo -e "`date +%F%T` pg_failover fired."
 # 1. fence primary host
-for ((k=0;k<100;k++))
+echo -e "`date +%F%T` fence primary host fired."
+for ((k=0;k<60;k++))
 do
   # fence命令, 设备不同的话, fence命令可能不一样.
   ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
   if [ $? -eq 0 ]; then
+    echo -e "`date +%F%T` fence primary db host success."
     FENCE_STATUS=0
     break
   fi
@@ -54,30 +56,38 @@ if [ $FENCE_STATUS -ne 0 ]; then
   return $FENCE_STATUS
 fi
 # 2. 激活standby
-pg_ctl promote -D $PGDATA
-PROMOTE_STATUS=$?
-if [ $PROMOTE_STATUS -eq 0 ]; then
-  echo -e "`date +%F%T` promote standby success."
-  # 3. 起vip接口
-  for ((l=0;l<100;l++))
-  do
-    sudo /sbin/ifup $VIP_IF
-    if [ $? -eq 0 ]; then
-      echo -e "`date +%F%T` vip upped success."
-      IFUP_STATUS=0
-      break
-    else
-      echo -e "`date +%F%T` vip upped failed."
-    fi
-  done
-  if [ $IFUP_STATUS -ne 0 ]; then
-    echo -e "`date +%F%T` standby host ifup vip failed."
-    return $IFUP_STATUS
+echo -e "`date +%F%T` promote standby fired."
+for ((l=0;l<60;l++))
+do
+  pg_ctl promote -D $PGDATA
+  if [ $? -eq 0 ]; then
+    echo -e "`date +%F%T` promote standby success."
+    PROMOTE_STATUS=0
+    break
   fi
-else
+  sleep 1
+done
+if [ $PROMOTE_STATUS -ne 0 ]; then
   echo -e "`date +%F%T` promote standby failed."
   return $PROMOTE_STATUS
 fi
+# 3. 起vip接口, 需要配置/etc/sudoers, 注释Defaults    requiretty
+echo -e "`date +%F%T` ifup vip fired."
+for ((m=0;m<60;m++))
+do
+  sudo /sbin/ifup $VIP_IF
+  if [ $? -eq 0 ]; then
+    echo -e "`date +%F%T` vip upped success."
+    IFUP_STATUS=0
+    break
+  fi
+  sleep 1
+done
+if [ $IFUP_STATUS -ne 0 ]; then
+  echo -e "`date +%F%T` standby host ifup vip failed."
+  return $IFUP_STATUS
+fi
+echo -e "`date +%F%T` pg_failover() function call success."
 return 0
 }
 
