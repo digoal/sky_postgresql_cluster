@@ -40,12 +40,16 @@ ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
 pg_ctl promote -D $PGDATA
 if [ $? -eq 0 ]; then
   echo -e "`date +%F%T` promote standby success."
-  sudo /sbin/ifup $VIP_IF
-  if [ $? -eq 0 ]; then
-    echo -e "`date +%F%T` vip upped success."
-  else
-    echo -e "`date +%F%T` vip upped failed."
-  fi
+  for ((k=0;k<100;k++))
+  do
+    sudo /sbin/ifup $VIP_IF
+    if [ $? -eq 0 ]; then
+      echo -e "`date +%F%T` vip upped success."
+      break
+    else
+      echo -e "`date +%F%T` vip upped failed."
+    fi
+  done
 else
   echo -e "`date +%F%T` promote standby failed."
 fi
@@ -70,8 +74,8 @@ fi
 
 # 启动sky_pg_clusterd前的判断条件之一, 判断主库和standby的复制是否正常.
 MASTER_TIME=`echo $SQL3 | psql -z -A -q -t -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - `
-# 间隔2秒后查询前面这条SQL的更新在standby上是否已经恢复, 从而判断standby是否正常, 延时是否在接受范围内.
-sleep 2
+# 间隔5秒后查询前面这条SQL的更新在standby上是否已经恢复, 从而判断standby是否正常, 延时是否在接受范围内.
+sleep 5
 STANDBY_TIME=`echo $SQL4 | psql -z -A -q -t -h $LOCAL_IP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - `
 if [ $MASTER_TIME != $STANDBY_TIME ]; then
   echo -e "standby: $STANDBY_TIME is laged far from master: $MASTER_TIME, exit abormal."
@@ -81,7 +85,7 @@ fi
 # 生成第一个NAGIOS_FILE1
 echo "`date +%F%T`  this is $STANDBY_CONTEXT node " > $NAGIOS_FILE1
 
-# 进入循环检测, sleep 1, 每隔1秒检测一次.
+# 进入循环检测, sleep 2, 每隔2秒检测一次.
 for ((i=0;i<10;i=0))
 do
   # 输出信息到状态文件, 用于给nagios检测sky_pg_clusterd是否存活. 通过Modify time和文件内容来判断. 这里也可以改成其他状态报告方式, 如向其他pg数据库发送一个更新消息.
@@ -91,7 +95,7 @@ do
   VOTE_TO_MASTER_STATUS=0
   for ((j=0;j<100;j++))
   do
-    sleep 1
+    sleep 2
     # 从standby主机到master vip获取主节点数据库状态. 0正常.
     echo $SQL1 | psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - 
     STD_TO_MASTER_STATUS=$?

@@ -175,6 +175,8 @@ chmod 400 authorized_keys
 配置sudo命令 : (node1, node2)
 让postgres用户可以调用/sbin/ifup命令, failover时使用. (sudo /sbin/ifup eth0:1)
 visudo -f /etc/sudoers
+# 注释 requiretty
+# Defaults    requiretty
 # 末尾添加
 # add by digoal
 postgres ALL=(ALL) NOPASSWD: /sbin/ifup
@@ -365,7 +367,7 @@ vi /home/postgres/.pgpass
 192.168.101.35:11921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
 
 
-配置failover, log_filter, nagios脚本 : 
+配置failover, log_filter, nagios脚本 : (node1, node2): 
 1. /usr/local/bin/sky_pg_clusterd.sh
 2. /usr/local/bin/log_filter.sh
 3. /usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh
@@ -378,7 +380,8 @@ chmod 555 /usr/local/nagios/libexec/check_standby_lag.sh
 配置日志清理crontab (node1, node2)
 # /tmp/sky_pg_clusterd.log 需要log_filter.sh来清理.
 # 定期执行/usr/local/bin/log_filter.sh
-sudo crontab -e
+su - root
+crontab -e
 8 1 * * * /usr/local/bin/log_filter.sh
 
 
@@ -389,9 +392,11 @@ sudo crontab -e
 启动sky_pg_clusterd.sh, su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
 
 2. standby节点 : 
+启动前检查进程是否已经存在, standby上查看ps -ewf|grep sky_pg_clusterd.sh
 启动standby库, su - postgres -c "pg_ctl start"
 启动sky_pg_clusterd.sh, su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
 
+3. 检查sky_pg_clusterd.sh是否正常启动, primary上查看/tmp/nagios_sky_pg_clusterd_alivetime, standby上查看ps -ewf|grep sky_pg_clusterd.sh
 
 配置nagios : (node1, node2)
 监控如下项 : 
@@ -401,7 +406,7 @@ virtual_ip+port
 standby_ip+port
 vote_host_ip+port
 2. 以下脚本的调用配置在 /usr/local/nagios/etc/nrpe.cfg
-sky_pg_clusterd是否存活  (/usr/local/nagios/libexec/check_sky_pg_clusterd.sh)
+sky_pg_clusterd是否存活  (/usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh)
 standby同步延时监控  (/usr/local/nagios/libexec/check_standby_lag.sh)
 vi /usr/local/nagios/etc/nrpe.cfg
 command[check_sky_pg_clusterd]=/usr/local/nagios/libexec/check_sky_pg_clusterd_alive.sh
@@ -430,6 +435,7 @@ service nrpe
         log_type        = FILE /dev/null
 }
 
+service xinetd restart
 
 测试failover : 
 1. 关闭vip, 发生failover
@@ -438,8 +444,8 @@ service nrpe
 4. 关闭standby网卡, 不发生failover
 
 
-failover发生后 : 
-1. 重构standby (原来的primary变成standby) , 使用rsync或pg_basebackup (本例使用pg_basebackup, 如果使用rsync可以配置node1和node2的ssh无密码互访, ssh-keygen) : 
+failover发生后要做的事情 : 
+1. 重构standby (原来的primary变成standby) , 使用rsync或pg_basebackup (本例使用pg_basebackup, 如果使用rsync可以配置node1和node2的ssh无密码互访, ssh-keygen)
 2. 在新的standby上启动sky_pg_clusterd.sh
 su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd.log 2>&1 &"
 
