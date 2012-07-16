@@ -34,25 +34,51 @@ FENCE_PWD=FEFETESTf12345112
 
 # pg_failover函数, 用于异常时fence主库, 将standby激活, 启动VIP.
 pg_failover() {
+FENCE_STATUS=1
+IFUP_STATUS=1
+PROMOTE_STATUS=1
 echo -e "`date +%F%T` pg_failover fired."
-# fence命令, 设备不同的话, fence命令可能不一样.
-ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+# 1. fence primary host
+for ((k=0;k<100;k++))
+do
+  # fence命令, 设备不同的话, fence命令可能不一样.
+  ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+  if [ $? -eq 0 ]; then
+    FENCE_STATUS=0
+    break
+  fi
+  sleep 1
+done
+if [ $FENCE_STATUS -ne 0 ]; then
+  echo -e "`date +%F%T` fence failed. Standby will not promote, please fix it manual."
+  return $FENCE_STATUS
+fi
+# 2. 激活standby
 pg_ctl promote -D $PGDATA
-if [ $? -eq 0 ]; then
+PROMOTE_STATUS=$?
+if [ $PROMOTE_STATUS -eq 0 ]; then
   echo -e "`date +%F%T` promote standby success."
-  for ((k=0;k<100;k++))
+  # 3. 起vip接口
+  for ((l=0;l<100;l++))
   do
     sudo /sbin/ifup $VIP_IF
     if [ $? -eq 0 ]; then
       echo -e "`date +%F%T` vip upped success."
+      IFUP_STATUS=0
       break
     else
       echo -e "`date +%F%T` vip upped failed."
     fi
   done
+  if [ $IFUP_STATUS -ne 0 ]; then
+    echo -e "`date +%F%T` standby host ifup vip failed."
+    return $IFUP_STATUS
+  fi
 else
   echo -e "`date +%F%T` promote standby failed."
+  return $PROMOTE_STATUS
 fi
+return 0
 }
 
 
@@ -132,8 +158,13 @@ do
         # 以上条件都满足则触发failover, 否则告知nagios, 并break跳出循环
         if [ $CNT -eq 1 ] && [ $LAG -eq 1 ]; then
           pg_failover
-          echo "`date +%F%T` failover fired. this is $PRIMARY_CONTEXT node now. " > $NAGIOS_FILE1
-	  exit 0
+          if [ $? -ne 0 ]; then
+            echo -e "`date +%F%T` pg_failover failed." > $NAGIOS_FILE1
+            exit 1
+          else
+            echo "`date +%F%T` failover fired. this is $PRIMARY_CONTEXT node now. " > $NAGIOS_FILE1
+            exit 0
+          fi
         else
           echo -e "`date +%F%T` cluster must be failover, but condition is not allowed: standby is not in recovery or standby is laged too much. "
           break
@@ -170,4 +201,3 @@ done
 # Author : Digoal zhou
 # Email : digoal@126.com
 # Blog : http://blog.163.com/digoal@126/
-
