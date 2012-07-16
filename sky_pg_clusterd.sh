@@ -1,7 +1,7 @@
 #!/bin/bash
-# 本程序必须运行在standby节点. 主要用于failover.
+# 本程序必须运行在standby节点. 用于failover.
 
-# 配置, node1,node2 可能不一致
+# 配置, node1,node2 可能不一致, psql, pg_ctl等命令必须包含在PATH中.
 export PGHOME=/opt/pgsql
 export LANG=en_US.utf8
 export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
@@ -9,7 +9,7 @@ export DATE=`date +"%Y%m%d%H%M"`
 export PATH=$PGHOME/bin:$PATH:.
 
 # 配置, node1,node2 可能不一致, 并且需配置.pgpass存储以下密码校验信息
-# NAGIOS_FILE1 被用于监控sky_pg_clusterd进程本身是否正常.
+# NAGIOS_FILE1 被nagios用于监控sky_pg_clusterd进程本身是否正常.
 NAGIOS_FILE1="/tmp/nagios_sky_pg_clusterd_alivetime"
 VIP_IF=eth0:1
 CLUSTER_VIP=192.168.169.116
@@ -27,7 +27,7 @@ SQL3="set client_min_messages=warning; with t1 as (update cluster_status set las
 SQL4="set client_min_messages=warning; select to_char(last_alive,'yyyymmddhh24miss') from cluster_status;"
 SQL5="set client_min_messages=warning; select 'standby_in_allowed_lag' as cluster_lag from cluster_status where now()-last_alive < interval '3 min';"
 
-# 配置, node1,node2 不一致, 配置主库节点的fence设备地址和用户密码
+# 配置, node1,node2 不一致, 配置当前主库(对方)节点的fence设备地址和用户密码
 FENCE_IP=192.168.179.213
 FENCE_USER=skyuser
 FENCE_PWD=FEFETESTf12345112
@@ -35,6 +35,7 @@ FENCE_PWD=FEFETESTf12345112
 # pg_failover函数, 用于异常时fence主库, 将standby激活, 启动VIP.
 pg_failover() {
 echo -e "`date +%F%T` pg_failover fired."
+# fence命令, 设备不同的话, fence命令可能不一样.
 ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
 pg_ctl promote -D $PGDATA
 if [ $? -eq 0 ]; then
@@ -69,6 +70,7 @@ fi
 
 # 启动sky_pg_clusterd前的判断条件之一, 判断主库和standby的复制是否正常.
 MASTER_TIME=`echo $SQL3 | psql -z -A -q -t -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - `
+# 间隔2秒后查询前面这条SQL的更新在standby上是否已经恢复, 从而判断standby是否正常, 延时是否在接受范围内.
 sleep 2
 STANDBY_TIME=`echo $SQL4 | psql -z -A -q -t -h $LOCAL_IP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - `
 if [ $MASTER_TIME != $STANDBY_TIME ]; then
@@ -79,11 +81,11 @@ fi
 # 生成第一个NAGIOS_FILE1
 echo "`date +%F%T`  this is $STANDBY_CONTEXT node " > $NAGIOS_FILE1
 
-# 进入循环检测, 每隔1秒检测一次.
+# 进入循环检测, sleep 1, 每隔1秒检测一次.
 for ((i=0;i<10;i=0))
 do
-  # 输出信息到状态文件, 用于给nagios检测sky_pg_clusterd是否存活. 通过Modify time和文件内容来判断. 这里可以改成其他状态报告方式, 如向其他pg数据库发送一个更新消息.
-  echo "`date +%F%T` recheck. this is $STANDBY_CONTEXT node. " > $NAGIOS_FILE1
+  # 输出信息到状态文件, 用于给nagios检测sky_pg_clusterd是否存活. 通过Modify time和文件内容来判断. 这里也可以改成其他状态报告方式, 如向其他pg数据库发送一个更新消息.
+  echo "`date +%F%T` sky_pg_cluster daemon process keepalive check. this is $STANDBY_CONTEXT node. " > $NAGIOS_FILE1
   STD_TO_MASTER_STATUS=0
   VOTEHOST_STATUS=0
   VOTE_TO_MASTER_STATUS=0
@@ -93,16 +95,21 @@ do
     # 从standby主机到master vip获取主节点数据库状态. 0正常.
     echo $SQL1 | psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - 
     STD_TO_MASTER_STATUS=$?
-    # 如果从standby主机到master vip获取主节点数据库状态 结果正常, 后面两个判断就省略了.
+    # 如果从standby主机到master vip获取主节点数据库状态, 0正常. 如果结果正常, 后面两个判断就省略了.
     if [ $STD_TO_MASTER_STATUS -eq 0 ]; then
       break
+    fi
+    # 判断从standby机器到仲裁机的跳转端口网络是否正常. 0正常. 如果结果不正常, 后面判断就省略了.
+    echo -e "q"|telnet -e "q" $VOTE_IP $VOTE_PORT
+    VOTEHOST_STATUS=$?
+    if [ $VOTEHOST_STATUS -ne 0 ]; then
+      break
+      echo -e "`date +%F%T` It looks like a standby's network problem, standby host cann't connect to primary and vote host."
     fi
     # 从standby主机到仲裁机获取主节点数据库状态. 0正常.
     echo $SQL1 | psql -h $VOTE_IP -p $VOTE_PORT -U $PGUSER -d $PGDBNAME -f - 
     VOTE_TO_MASTER_STATUS=$?
-    # 确保standby机器到仲裁机的跳转端口网络正常. 0正常.
-    (echo -e "q"|telnet -e "q" $VOTE_IP $VOTE_PORT) || VOTEHOST_STATUS=$?
-    # 当满足1.standby认为master数据库不正常, 2.仲裁认为master数据库不正常, 3.standby到仲裁的跳转端口正常 时发生failover.
+    # 当满足 1.standby认为master数据库不正常, 2.仲裁认为master数据库不正常, 3.standby到仲裁的跳转端口正常 时发生failover.
     if [ $STD_TO_MASTER_STATUS -ne 0 ] && [ $VOTE_TO_MASTER_STATUS -ne 0 ] && [ $VOTEHOST_STATUS -eq 0 ]; then
       echo -e "`date +%F%T` STD_TO_MASTER_STATUS is $STD_TO_MASTER_STATUS , master is not health count $j .\n"
       echo -e "`date +%F%T` VOTE_TO_MASTER_STATUS is $VOTE_TO_MASTER_STATUS , master is not health count $j .\n"
@@ -115,10 +122,10 @@ do
         LAG=`echo $SQL5 | psql -h $LOCAL_IP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - | grep -c standby_in_allowed_lag`
       fi
       # 连续10次检测到不正常状态后, 触发failover.
-      if [ $j -gt 10 ]; then
-        # standby是否正常的标记(is in recovery), CNT=1 表示正常.
-        # standby lag 在接受范围内的标记, LAG=1 表示正常.
-        # 以上条件都正常则触发failover, 否则告知nagios, 并break
+      if [ $j -ge 9 ]; then
+        # 判断 standby是否正常的标记(is in recovery), CNT=1 表示正常.
+        # 判断 standby lag 在接受范围内的标记, LAG=1 表示正常.
+        # 以上条件都满足则触发failover, 否则告知nagios, 并break跳出循环
         if [ $CNT -eq 1 ] && [ $LAG -eq 1 ]; then
           pg_failover
           echo "`date +%F%T` failover fired. this is $PRIMARY_CONTEXT node now. " > $NAGIOS_FILE1
@@ -151,7 +158,7 @@ done
 # 3. 起VIP
 # 4. 结束sky_pg_clusterd进程, 通知 nagios 发生 failover(持续warning).
 
-# nagios 根据/tmp/nagios_sky_pg_clusterd_alivetime 修改时间和内容(grep $PRIMARY_CONTEXT | $STANDBY_CONTEXT )监控 sky_pg_clusterd 进程存活.
+# nagios 根据/tmp/nagios_sky_pg_clusterd_alivetime 修改时间监控 sky_pg_clusterd 进程存活, 内容(grep $PRIMARY_CONTEXT | $STANDBY_CONTEXT)判断角色.
 
 
 # Thanks http://www.inlab.de/
