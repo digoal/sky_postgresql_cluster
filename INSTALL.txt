@@ -509,7 +509,7 @@ fence :
               TOR.
 
 fence 命令 : 
-ipmitool -L OPERATOR -H 192.168.179.213 -U skyuser -P csuN1crxg4As power reset
+ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
 
 # Author : Digoal zhou
 # Email : digoal@126.com
