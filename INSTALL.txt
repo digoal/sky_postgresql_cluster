@@ -306,19 +306,6 @@ create role replica nosuperuser nocreatedb nocreaterole noinherit replication co
 启动VIP : (node1)
 sudo /sbin/ifup eth0:1
 
-复制主库, 创建standby : (node2)
-su - postgres
-pg_basebackup -D $PGDATA -F p -X stream -c fast -l base -P -v -s 1 -h 192.168.169.116 -p 1921 -U replica
-cd $PGDATA
-mv recovery.done recovery.conf
-
-启动standby : (node2)
-su - postgres
-pg_ctl start
-正常的话, node1上面会多一个sender进程, node2上面会多一个receiver进程 : 
-postgres: wal sender process replica 192.168.169.111(45020) streaming 0/4047700
-postgres: wal receiver process   streaming 0/4047700
-
 配置HA : 
 新增HA user, db, 状态表(node1) : 
 create role sky_pg_cluster nosuperuser nocreatedb nocreaterole noinherit login encrypted password 'SKY_PG_cluster_321';
@@ -344,6 +331,28 @@ FOR STATEMENT EXECUTE PROCEDURE cannt_delete();
 
 -- 插入初始数据
 insert into cluster_status values (1, now());
+
+配置pg_hba.conf (node1) (允许主,备,VIP,仲裁以及回环地址通过sky_pg_cluster用户访问sky_pg_cluster数据库. 集群脚本中要用到更新这个库的表.)
+vi $PGDATA/pg_hba.conf
+host sky_pg_cluster sky_pg_cluster 127.0.0.1/32 md5
+host sky_pg_cluster sky_pg_cluster 192.168.169.110/32 md5
+host sky_pg_cluster sky_pg_cluster 192.168.169.111/32 md5
+host sky_pg_cluster sky_pg_cluster 192.168.169.116/32 md5
+host sky_pg_cluster sky_pg_cluster 192.168.101.35/32 md5
+pg_ctl reload
+
+复制主库, 创建standby : (node2)
+su - postgres
+pg_basebackup -D $PGDATA -F p -X stream -c fast -l base -P -v -s 1 -h 192.168.169.116 -p 1921 -U replica
+cd $PGDATA
+mv recovery.done recovery.conf
+
+启动standby : (node2)
+su - postgres
+pg_ctl start
+正常的话, node1上面会多一个sender进程, node2上面会多一个receiver进程 : 
+postgres: wal sender process replica 192.168.169.111(45020) streaming 0/4047700
+postgres: wal receiver process   streaming 0/4047700
 
 配置仲裁机, 前提(仲裁机, node1, node2 网络互通)
 仲裁机上起一个监听端口, 用于跳转到vip的PostgreSQL主库监听端口. 如(仲裁机:11921 <-> master:1921)
