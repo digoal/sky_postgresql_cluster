@@ -308,7 +308,7 @@ sudo /sbin/ifup eth0:1
 
 复制主库, 创建standby : (node2)
 su - postgres
-pg_basebackup -D $PGDATA -F p -x stream -c fast -l base -P -v -s 1 -h 192.168.169.116 -p 1921 -U replica
+pg_basebackup -D $PGDATA -F p -X stream -c fast -l base -P -v -s 1 -h 192.168.169.116 -p 1921 -U replica
 cd $PGDATA
 mv recovery.done recovery.conf
 
@@ -414,7 +414,7 @@ command[check_standby_lag]=/usr/local/nagios/libexec/check_standby_lag.sh
 
 service xinetd restart
 
-注意, 这些脚本是哪个用户去调用的(如root或nagios或postgres用户等, 因为需要用到psql, 建议改成postgres用户.).
+注意, 这些脚本是哪个用户去调用的呢?(如root或nagios或postgres用户等, 因为需要用到psql, 建议改成postgres用户.)
 使用其他用户执行nagios命令, 修改user和group : 
 cat /etc/xinetd.d/nrpe
 # default: on
@@ -509,7 +509,7 @@ fence :
               TOR.
 
 fence 命令 : 
-ipmitool -L OPERATOR -H 192.168.179.213 -U skyuser -P csuN1crxg4As power reset
+ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
 
 # Author : Digoal zhou
 # Email : digoal@126.com

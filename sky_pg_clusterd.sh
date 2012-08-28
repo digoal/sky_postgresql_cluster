@@ -29,8 +29,8 @@ SQL5="set client_min_messages=warning; select 'standby_in_allowed_lag' as cluste
 
 # 配置, node1,node2 不一致, 配置当前主库(对方)节点的fence设备地址和用户密码
 FENCE_IP=192.168.179.213
-FENCE_USER=skyuser
-FENCE_PWD=FEFETESTf12345112
+FENCE_USER=test
+FENCE_PWD=test123
 
 # pg_failover函数, 用于异常时fence主库, 将standby激活, 启动VIP.
 pg_failover() {
