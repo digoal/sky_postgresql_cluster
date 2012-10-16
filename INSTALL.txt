@@ -288,6 +288,7 @@ vi recovery.done
 recovery_target_timeline = 'latest'
 standby_mode = on
 primary_conninfo = 'host=192.168.169.116 port=1921 user=replica keepalives_idle=60'             # e.g. 'host=localhost port=1921'
+# 支持pg_ctl promote功能的版本不需要配置trigger_file文件.
 trigger_file = '/data/pgdata/pg_root/.1921.trigger'
 
 配置密码文件 : (node1, node2)
