@@ -292,8 +292,6 @@ trigger_file = '/data/pgdata/pg_root/.1921.trigger'
 
 配置密码文件 : (node1, node2)
 vi /home/postgres/.pgpass
-192.168.169.110:1921:replication:replica:REPLICA321
-192.168.169.111:1921:replication:replica:REPLICA321
 192.168.169.116:1921:replication:replica:REPLICA321
 chmod 400 .pgpass
 
