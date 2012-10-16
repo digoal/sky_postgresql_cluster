@@ -46,7 +46,7 @@ enabled=1
 gpgcheck=0
 
 安装需要的包.(node1, node2)
-yum -y install python-devel tcl-devel perl-devel OpenIPMI-tools .....
+yum -y install python-devel tcl-devel perl-devel Open-tools .....
 
 vi /etc/sysctl.conf (node1, node2)
 # add by digoal.zhou
@@ -516,7 +516,9 @@ fence :
               TOR.
 
 fence 命令 : 
-ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+/usr/bin/ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+/sbin/fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+/sbin/fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
 
 # Author : Digoal zhou
 # Email : digoal@126.com
