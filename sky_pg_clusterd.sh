@@ -108,6 +108,7 @@ if [ $CNT -ne 1 ]; then
   exit 1
 fi
 
+# 以下两条, psql -z 选项需要到PostgreSQL9.2才有, 其他版本不使用-z
 # 启动sky_pg_clusterd前的判断条件之一, 判断主库和standby的复制是否正常.
 MASTER_TIME=`echo $SQL3 | psql -z -A -q -t -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - `
 # 间隔5秒后查询前面这条SQL的更新在standby上是否已经恢复, 从而判断standby是否正常, 延时是否在接受范围内.
