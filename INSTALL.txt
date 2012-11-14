@@ -448,7 +448,9 @@ service xinetd restart
 测试failover : 
 1. 关闭vip, 发生failover
 2. 关闭vip和vote_host上的转发端口, 不发生failover
-3. 关闭主库, 发生failover
+3. 关闭主库, 发生failover.(可能因为telnet vote:proxy_port返回1而造成无法满足切换条件. 
+   原因是balance在处理tcp三次握手时需要和后面的主机交互,所以如果关闭了主库,将会收到主库的reset信号关闭连接. 
+   这种情况下telnet的返回值是1.)
 4. 关闭standby网卡, 不发生failover
 
 
