@@ -141,7 +141,7 @@ do
       break
     fi
     # 判断从standby机器到仲裁机的跳转端口网络是否正常. 0正常. 如果结果不正常, 后面判断就省略了.
-    echo -e "q"|telnet -e "q" $VOTE_IP $VOTE_PORT
+    /usr/local/bin/port_probe $VOTE_IP $VOTE_PORT
     VOTEHOST_STATUS=$?
     if [ $VOTEHOST_STATUS -ne 0 ]; then
       break

@@ -374,6 +374,12 @@ vi /home/postgres/.pgpass
 127.0.0.1:1921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
 192.168.101.35:11921:sky_pg_cluster:sky_pg_cluster:SKY_PG_cluster_321
 
+编译port_probe : (node1, node2):
+gcc -O3 -Wall -Wextra -Werror -g -o port_probe ./port_probe.c
+chmod 555 port_probe
+mv port_probe /usr/local/bin
+测试port_probe是否正常:
+port_probe $node_ip $port
 
 配置failover, log_filter, nagios脚本 : (node1, node2): 
 1. /usr/local/bin/sky_pg_clusterd.sh
@@ -450,7 +456,8 @@ service xinetd restart
 2. 关闭vip和vote_host上的转发端口, 不发生failover
 3. 关闭主库, 发生failover.(可能因为telnet vote:proxy_port返回1而造成无法满足切换条件. 
    原因是balance在处理tcp三次握手时需要和后面的主机交互,所以如果关闭了主库,将会收到主库的reset信号关闭连接. 
-   这种情况下telnet的返回值是1.)
+   这种情况下telnet的返回值是1.
+   所以探测vote上的端口代理是否正常改用port_probe程序.)
 4. 关闭standby网卡, 不发生failover
 
 
