@@ -307,7 +307,8 @@ sudo /sbin/ifup eth0:1
 
 配置HA : 
 新增HA user, db, 状态表(node1) : 
-create role sky_pg_cluster nosuperuser nocreatedb nocreaterole noinherit login encrypted password 'SKY_PG_cluster_321';
+-- 建议使用superuser, 原因见http://blog.163.com/digoal@126/blog/static/163877040201331995623214/
+create role sky_pg_cluster superuser nocreatedb nocreaterole noinherit login encrypted password 'SKY_PG_cluster_321';
 create database sky_pg_cluster with template template0 encoding 'UTF8' owner sky_pg_cluster;
 \c sky_pg_cluster sky_pg_cluster
 create schema sky_pg_cluster authorization sky_pg_cluster;
