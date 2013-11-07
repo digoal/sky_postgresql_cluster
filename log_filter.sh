@@ -12,7 +12,7 @@ unset USERNAME
 SKY_PG_CLUSTERD_LOGFILE=/tmp/sky_pg_clusterd.log
 SKY_PG_CLUSTERD_LOGFILE1=/tmp/sky_pg_clusterd.log.1
 
-cat $SKY_PG_CLUSTERD_LOGFILE | grep -v "UPDATE 1"|grep -v "SET" >>$SKY_PG_CLUSTERD_LOGFILE1
+cat $SKY_PG_CLUSTERD_LOGFILE | grep -v "cluster_keepalive_test"|grep -v "SET"|grep -v "\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-"|grep -v "(1 row)"|grep -v "UPDATE 1"|grep -v " "|grep -v "^$" >>$SKY_PG_CLUSTERD_LOGFILE1
 echo "" >$SKY_PG_CLUSTERD_LOGFILE
 
 # Author : Digoal zhou
