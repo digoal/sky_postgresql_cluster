@@ -21,7 +21,7 @@ VOTE_IP=192.168.101.35
 VOTE_PORT=11921
 PRIMARY_CONTEXT=primary
 STANDBY_CONTEXT=standby
-SQL1="set client_min_messages=warning; select cluster_keepalive_test();"
+SQL1="select cluster_keepalive_test();"
 SQL2="set client_min_messages=warning; select 'this_is_standby' as cluster_role from ( select pg_is_in_recovery() as std ) t where t.std is true;"
 SQL3="set client_min_messages=warning; with t1 as (update cluster_status set last_alive = now() returning last_alive) select to_char(last_alive,'yyyymmddhh24miss') from t1;"
 SQL4="set client_min_messages=warning; select to_char(last_alive,'yyyymmddhh24miss') from cluster_status;"
@@ -98,7 +98,7 @@ return 0
 
 
 # 启动sky_pg_clusterd前的判断条件之一, 通过vip判断master的状态是否正常
-echo $SQL1 | psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f -
+psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -c "$SQL1"
 if [ $? -ne 0 ]; then
   echo -e "master is not health, please check, exit abnormal."
   exit 1
@@ -139,7 +139,7 @@ do
   do
     sleep 2
     # 从standby主机到master vip获取主节点数据库状态. 0正常.
-    echo $SQL1 | psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -f - 
+    psql -h $CLUSTER_VIP -p $PGPORT -U $PGUSER -d $PGDBNAME -c "$SQL1"
     STD_TO_MASTER_STATUS=$?
     # 如果从standby主机到master vip获取主节点数据库状态, 0正常. 如果结果正常, 后面两个判断就省略了.
     if [ $STD_TO_MASTER_STATUS -eq 0 ]; then
@@ -153,7 +153,7 @@ do
       echo -e "`date +%F%T` It looks like a standby's network problem, standby host cann't connect to primary and vote host."
     fi
     # 从standby主机到仲裁机获取主节点数据库状态. 0正常.
-    echo $SQL1 | psql -h $VOTE_IP -p $VOTE_PORT -U $PGUSER -d $PGDBNAME -f - 
+    psql -h $VOTE_IP -p $VOTE_PORT -U $PGUSER -d $PGDBNAME -c "$SQL1"
     VOTE_TO_MASTER_STATUS=$?
     # 当满足 1.standby认为master数据库不正常, 2.仲裁认为master数据库不正常, 3.standby到仲裁的跳转端口正常 时发生failover.
     if [ $STD_TO_MASTER_STATUS -ne 0 ] && [ $VOTE_TO_MASTER_STATUS -ne 0 ] && [ $VOTEHOST_STATUS -eq 0 ]; then
