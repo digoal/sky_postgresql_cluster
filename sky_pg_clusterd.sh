@@ -21,7 +21,7 @@ VOTE_IP=192.168.101.35
 VOTE_PORT=11921
 PRIMARY_CONTEXT=primary
 STANDBY_CONTEXT=standby
-SQL1="set client_min_messages=warning; update cluster_status set last_alive=now();"
+SQL1="set client_min_messages=warning; select cluster_keepalive_test();"
 SQL2="set client_min_messages=warning; select 'this_is_standby' as cluster_role from ( select pg_is_in_recovery() as std ) t where t.std is true;"
 SQL3="set client_min_messages=warning; with t1 as (update cluster_status set last_alive = now() returning last_alive) select to_char(last_alive,'yyyymmddhh24miss') from t1;"
 SQL4="set client_min_messages=warning; select to_char(last_alive,'yyyymmddhh24miss') from cluster_status;"
@@ -36,7 +36,7 @@ FENCE_PWD=test123
 pg_failover() {
 FENCE_STATUS=1
 PROMOTE_STATUS=1
-IFUP_STATUS=1
+
 echo -e "`date +%F%T` pg_failover fired."
 # 1. fence primary host
 echo -e "`date +%F%T` fence primary host fired."
@@ -72,21 +72,26 @@ if [ $PROMOTE_STATUS -ne 0 ]; then
   return $PROMOTE_STATUS
 fi
 # 3. 起vip接口, 需要配置/etc/sudoers, 注释Defaults    requiretty
-echo -e "`date +%F%T` ifup vip fired."
+# VIP1
+echo -e "`date +%F%T` ifup vip1 fired."
+IFUP_STATUS=1
 for ((m=0;m<60;m++))
 do
   sudo /sbin/ifup $VIP_IF
   if [ $? -eq 0 ]; then
-    echo -e "`date +%F%T` vip upped success."
+    echo -e "`date +%F%T` vip1 upped success."
     IFUP_STATUS=0
     break
   fi
   sleep 1
 done
 if [ $IFUP_STATUS -ne 0 ]; then
-  echo -e "`date +%F%T` standby host ifup vip failed."
+  echo -e "`date +%F%T` standby host ifup vip1 failed."
   return $IFUP_STATUS
 fi
+
+# VIP2 ...
+
 echo -e "`date +%F%T` pg_failover() function call success."
 return 0
 }
