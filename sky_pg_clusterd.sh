@@ -11,7 +11,7 @@ export PATH=$PGHOME/bin:$PATH:.
 # 配置, node1,node2 可能不一致, 并且需配置.pgpass存储以下密码校验信息
 # NAGIOS_FILE1 被nagios用于监控sky_pg_clusterd进程本身是否正常.
 NAGIOS_FILE1="/tmp/nagios_sky_pg_clusterd_alivetime"
-VIP_IF=eth0:1
+VIP_IF1=eth0:1
 CLUSTER_VIP=192.168.169.116
 LOCAL_IP=127.0.0.1
 PGUSER=sky_pg_cluster
@@ -77,7 +77,7 @@ echo -e "`date +%F%T` ifup vip1 fired."
 IFUP_STATUS=1
 for ((m=0;m<60;m++))
 do
-  sudo /sbin/ifup $VIP_IF
+  sudo /sbin/ifup $VIP_IF1
   if [ $? -eq 0 ]; then
     echo -e "`date +%F%T` vip1 upped success."
     IFUP_STATUS=0
