@@ -22,7 +22,7 @@ VOTE_IP=192.168.xx.xx
 VOTE_PORT=xxxx
 PRIMARY_CONTEXT=primary
 STANDBY_CONTEXT=standby
-SQL1="set client_min_messages=warning; update cluster_status set last_alive=now();"
+SQL1="set client_min_messages=warning; select cluster_keepalive_test();"
 SQL2="set client_min_messages=warning; select 'this_is_standby' as cluster_role from ( select pg_is_in_recovery() as std ) t where t.std is true;"
 SQL3="set client_min_messages=warning; with t1 as (update cluster_status set last_alive = now() returning last_alive) select to_char(last_alive,'yyyymmddhh24miss') from t1;"
 SQL4="set client_min_messages=warning; select to_char(last_alive,'yyyymmddhh24miss') from cluster_status;"
@@ -73,9 +73,9 @@ if [ $PROMOTE_STATUS -ne 0 ]; then
   return $PROMOTE_STATUS
 fi
 # 3. 起vip接口, 需要配置/etc/sudoers, 注释Defaults    requiretty
-echo -e "`date +%F%T` ifup vip fired."
 # vip1
 IFUP_STATUS=1
+echo -e "`date +%F%T` ifup vip1 fired."
 for ((m=0;m<60;m++))
 do
   sudo /sbin/ifup $VIP_IF1
@@ -93,6 +93,7 @@ fi
 
 # vip2
 IFUP_STATUS=1
+echo -e "`date +%F%T` ifup vip2 fired."
 for ((m=0;m<60;m++))
 do
   sudo /sbin/ifup $VIP_IF2
