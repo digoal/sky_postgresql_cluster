@@ -498,6 +498,7 @@ su - postgres -c "nohup /usr/local/bin/sky_pg_clusterd.sh >>/tmp/sky_pg_clusterd
 1. pg_hba.conf, postgresql.conf的更新. 无法通过流复制传递, 所以需要手工同步.
 2. 表空间新增, 目录需要先在备份和主节点建好. 
 3. 新增模块, 模块如果是新编译的, 那么主备都需要编译. 如果是已经编译好的只是在数据库里面执行CREATE extension或执行SQL的则会自动通过流复制同步.
+4. 在挂掉的主数据库切换成新的备机时, 先把recovery.done更名为recovery.conf, 然后将pg_xlog中的文件转移, 目的是从新的主库获取pg_xlog, 减少需要重新做pg_basebackup的概率.
 
 二、
 ipmitool 用到的 fence部分 : 
