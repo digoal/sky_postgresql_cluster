@@ -336,6 +336,7 @@ insert into cluster_status values (1, now());
 -- (注意原来的函数使用alter table set tablespace来做测试, 产生了较多的xlog, 同时需要排他锁, 现在改成update).
 -- 使用update不同的表空间中的数据, 并不能立刻反应表空间的问题. 因为大多数数据在shared_buffer中.
 -- 如果表空间对应的文件系统io有问题, 那么在checkpoint时会产生58类的错误.
+-- 使用pg_stat_file函数可以立刻暴露io的问题.
 create or replace function cluster_keepalive_test() returns void as $$
 declare
   v_spcname text;
@@ -364,6 +365,7 @@ begin
     else
       execute 'update '||v_nspname||'.t_'||v_spcname||' set crt_time='||''''||now()||'''';
     end if;
+    perform pg_stat_file(pg_relation_filepath(v_nspname||'.t_'||v_spcname));
   END LOOP;
   select spcname into v_spcname from pg_tablespace where 
     oid = (select dattablespace from pg_database where datname=current_database());
@@ -379,6 +381,7 @@ begin
   else
     execute 'update '||v_nspname||'.t_'||v_spcname||' set crt_time='||''''||now()||'''';
   end if;
+  perform pg_stat_file(pg_relation_filepath(v_nspname||'.t_'||v_spcname));
 end;
 $$ language plpgsql strict;
 -- 在创建测试函数后, 最好测试一下是否正常, 因为某些版本的系统表可能不通用, 需要调整.
