@@ -346,6 +346,7 @@ begin
       raise notice 'this is standby node.';
       return;
     end if;
+  update cluster_status set last_alive=now();
   FOR v_spcname,v_spcoid IN 
     select spcname,oid from pg_tablespace where 
       oid <> (select dattablespace from pg_database where datname=current_database())
