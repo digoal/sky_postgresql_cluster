@@ -77,6 +77,13 @@ vi /etc/security/limits.conf (node1, node2)
 * soft    memlock 50000000
 * hard    memlock 50000000
 
+如果是centos 6.x的话还需要修改 /etc/security/limits.d/90-nproc.conf
+vi /etc/security/limits.d/90-nproc.conf 
+#*          soft    nproc     1024
+#root       soft    nproc     unlimited
+* soft    nproc   131072
+* hard    nproc   131072
+
 同步时钟 (node1, node2)
 crontab -e
 8 * * * * /usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
