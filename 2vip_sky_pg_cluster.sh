@@ -24,7 +24,7 @@ PRIMARY_CONTEXT=primary
 STANDBY_CONTEXT=standby
 SQL1="select cluster_keepalive_test();"
 SQL2="set client_min_messages=warning; select 'this_is_standby' as cluster_role from ( select pg_is_in_recovery() as std ) t where t.std is true;"
-SQL3="set client_min_messages=warning; with t1 as (update cluster_status set last_alive = now() returning last_alive) select to_char(last_alive,'yyyymmddhh24miss') from t1;"
+SQL3="set client_min_messages=warning; update cluster_status set last_alive = now() returning to_char(last_alive,'yyyymmddhh24miss');"
 SQL4="set client_min_messages=warning; select to_char(last_alive,'yyyymmddhh24miss') from cluster_status;"
 SQL5="set client_min_messages=warning; select 'standby_in_allowed_lag' as cluster_lag from cluster_status where now()-last_alive < interval '3 min';"
 
@@ -32,6 +32,9 @@ SQL5="set client_min_messages=warning; select 'standby_in_allowed_lag' as cluste
 FENCE_IP=192.168.xx.xx
 FENCE_USER=xxx
 FENCE_PWD=xxx
+
+# 9.0 使用触发器文件
+# TRIG_FILE='/data01/pgdata/pg_root/.1921.trigger'
 
 # pg_failover函数, 用于异常时fence主库, 将standby激活, 启动VIP.
 pg_failover() {
@@ -44,7 +47,8 @@ for ((k=0;k<60;k++))
 do
   # fence命令, 设备不同的话, fence命令可能不一样.
   # /usr/bin/ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
-  /sbin/fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+  # 不要使用绝对路径, 路径在不同的linux版本中可能不一样.
+  fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
   if [ $? -eq 0 ]; then
     echo -e "`date +%F%T` fence primary db host success."
     FENCE_STATUS=0
@@ -60,6 +64,8 @@ fi
 echo -e "`date +%F%T` promote standby fired."
 for ((l=0;l<60;l++))
 do
+  # 9.0 使用触发文件激活
+  # touch $TRIG_FILE
   pg_ctl promote -D $PGDATA
   if [ $? -eq 0 ]; then
     echo -e "`date +%F%T` promote standby success."
@@ -227,6 +233,10 @@ done
 
 # nagios 根据/tmp/nagios_sky_pg_clusterd_alivetime 修改时间监控 sky_pg_clusterd 进程存活, 内容(grep $PRIMARY_CONTEXT | $STANDBY_CONTEXT)判断角色.
 
+# fence 命令 : 
+# /usr/bin/ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+# /sbin/fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+# /sbin/fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboo
 
 # Thanks http://www.inlab.de/
 
