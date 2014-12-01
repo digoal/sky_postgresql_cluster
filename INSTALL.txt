@@ -107,6 +107,7 @@ NETMASK=255.255.255.0
 [root@db-192-168-169-110 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0:1
 DEVICE=eth0:1
 ONBOOT=no
+ONPARENT=no
 BOOTPROTO=static
 HWADDR=D4:BE:D9:AD:9A:B6
 IPADDR=192.168.169.116
@@ -123,11 +124,13 @@ NETMASK=255.255.255.0
 [root@db-192-168-169-111 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0:1
 DEVICE=eth0:1
 ONBOOT=no
+ONPARENT=no
 BOOTPROTO=static
 HWADDR=D4:BE:D9:AD:97:7A
 IPADDR=192.168.169.116
 NETMASK=255.255.255.0
 
+/* -----------------  以下操作没有必要, 使用ONPARENT=no即可防止子接口随主接口启动.
 关闭network服务自动启动 (node1, node2)
 chkconfig network off
 
@@ -137,6 +140,17 @@ vi /etc/rc.local
 /sbin/service network start
 /sbin/ifup eth0
 /sbin/ifdown eth0:1
+
+建议修改/etc/sysconfig/network-scripts/ifup-aliases
+控制aliases接口启动时检查IP是否已经存在. 
+##echo "setting up device $DEVICE"
+/sbin/ifconfig ${DEVICE} ${IPADDR} netmask ${NETMASK} broadcas
+t ${BROADCAST}
+改为
+/sbin/arping -q -c 2 -w 3 -D -I ${DEVICE} ${IPADDR} && /sbin/ifconfig ${DEVICE} ${IPADDR} netmask ${NETMASK} broadcas
+t ${BROADCAST}
+
+   ------------------  */
 
 按需配置iptables (node1, node2, vote_host)
 允许node1,node2 相互访问PostgreSQL监听端口, 
@@ -590,9 +604,9 @@ fence :
               TOR.
 
 fence 命令 : 
-/usr/bin/ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
-/sbin/fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
-/sbin/fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
 
 # Author : Digoal zhou
 # Email : digoal@126.com
