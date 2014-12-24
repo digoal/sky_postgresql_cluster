@@ -217,10 +217,12 @@ done
 
 # nagios 根据/tmp/nagios_sky_pg_clusterd_alivetime 修改时间监控 sky_pg_clusterd 进程存活, 内容(grep $PRIMARY_CONTEXT | $STANDBY_CONTEXT)判断角色.
 
-# fence 命令 : 
-# /usr/bin/ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
-# /sbin/fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
-# /sbin/fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+# fence 命令, 不要使用绝对路径 : 
+# ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+# IPMI v2 使用lanplus
+# ipmitool -I lanplus -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+# fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
+# fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
 
 # Thanks http://www.inlab.de/
 
