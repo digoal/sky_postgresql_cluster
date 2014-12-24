@@ -605,6 +605,8 @@ fence :
 
 fence 命令 : 
 ipmitool -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
+如果是IPMI v2请使用-I lanplus
+ipmitool -I lanplus -L OPERATOR -H $FENCE_IP -U $FENCE_USER -P $FENCE_PWD power reset
 fence_rsa -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
 fence_ilo -a $FENCE_IP -l $FENCE_USER -p $FENCE_PWD -o reboot
 
