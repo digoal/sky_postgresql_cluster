@@ -21,3 +21,4 @@ Requirement :
 # Author : Digoal.zhou
 # Email : digoal@126.com
 # Blog : http://blog.163.com/digoal@126/
+# 请使用另一个项目 https://github.com/digoal/PostgreSQL_HA_with_primary_standby_2vip
